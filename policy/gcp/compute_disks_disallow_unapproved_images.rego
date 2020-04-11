@@ -12,7 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-package gcp.appengine.apps.services.versions.instances.policy.debug
+
+package rpe.policy.compute_disks_disallow_unapproved_images
+
+#####
+# Policy metadata
+#####
+
+description = "Disallow use of unapproved images for compute disks"
+applies_to =  [
+  "compute.googleapis.com/Disk"
+]
 
 #####
 # Resource metadata
@@ -24,32 +34,17 @@ labels = input.labels
 # Policy evaluation
 #####
 
-default valid = true
+default valid = false
+default excluded = false
 
-valid = false {
-    input.vmDebugEnabled == true
+# approved project_id for images is configured in policy/config.yaml - instances.harden_images_project
+
+# Check if hardened image used
+valid = true {
+    contains(input.sourceImage, concat("/",["projects",data.config.instances.harden_images_project]))
 }
 
 
-#####
- # Remediation
- #####
-
-remediate = {
-  "_remediation_spec": "v2beta1",
-  "steps": [
-    delete_instance
-  ]
+excluded = true {
+  data.exclusions.label_exclude(labels)
 }
-
-delete_instance = {
-    "method": "delete",
-    "params": {
-        "appsId": name_parts[1],
-        "servicesId": name_parts[3],
-        "versionsId": name_parts[5],
-        "instancesId": name_parts[7]
-    }
-}
-
-name_parts = split(input.name, "/")

@@ -13,38 +13,42 @@
 # limitations under the License.
 
 
-package gcp.compute.disks.policy.hardened_image
+package rpe.policy.cloudfunctions_disallow_default_service_account
+
+#####
+# Policy metadata
+#####
+
+description = "Disallow the use of the default service account for running cloud functions"
+applies_to = [
+  "cloudfunctions.googleapis.com/CloudFunction"
+]
 
 #####
 # Resource metadata
 #####
 
-labels = input.labels
+resource = input.resource
+labels = resource.labels
 
 #####
 # Policy evaluation
 #####
 
 default valid = false
+default excluded = false
 
-# approved project_id for images is configured in policy/config.yaml - instances.harden_images_project
-
-# Check if hardened image used
+# Check if default service account is not used
 valid = true {
-    contains(input.sourceImage, concat("/",["projects",data.config.instances.harden_images_project]))
+  input.serviceAccountEmail != serviceAccountEmail
 }
 
 # Check for a global exclusion based on resource labels
-valid = true {
+excluded = true {
   data.exclusions.label_exclude(labels)
 }
 
-#####
-# Remediation
-#####
-
-# Since we cannot remediate it, if policy fails lets end it with "No possible remediation"
-remediate[key] = value {
-  false
-  input[key]=value
-}
+# extract project name from function name
+projectNamePart = split(resource.name, "/")
+# construct email for default cloud function service account
+serviceAccountEmail = concat("@", [projectNamePart[1], "appspot.gserviceaccount.com"])

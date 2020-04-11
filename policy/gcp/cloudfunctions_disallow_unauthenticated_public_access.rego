@@ -13,46 +13,69 @@
 # limitations under the License.
 
 
-package gcp.cloudfunctions.projects.locations.functions.iam.policy.disallow_allauthenticatedusers
+package rpe.policy.cloudfunctions_disallow_unauthenticated_public_access
+
+#####
+# Policy metadata
+#####
+
+description = "Disallow unauthenticated public access for invoking cloud functions"
+applies_to = [
+    "cloudfunctions.googleapis.com/CloudFunction"
+]
 
 #####
 # Resource metadata
 #####
 
-labels = input._resource.labels
+resource = input.resource
+iam = input.iam
+labels = resource.labels
 
 #####
 # Policy evaluation
 #####
 
 default valid = true
+default excluded = false
 
-# Check if there is a binding for *allAuthenticatedUsers*
 valid = false {
-  # Check for bad policy
-  input.bindings[_].members[_] == "allAuthenticatedUsers"
+  iam.bindings[_].members[_] == "allUsers"
+}
 
-  # Just in case labels are not in the input
-  not labels
-} else = false {
-  input.bindings[_].members[_] == "allAuthenticatedUsers"
-
-  # Also, make sure this resource isn't excluded by label
-  not data.exclusions.label_exclude(labels)
+excluded = true {
+  data.exclusions.label_exclude(labels)
 }
 
 #####
 # Remediation
 #####
 
+remediate = {
+  "_remediation_spec": "v2beta1",
+  "steps": [
+    remove_bad_bindings
+  ]
+}
+
+remove_bad_bindings = {
+    "method": "setIamPolicy",
+    "params": {
+        "resource": resource.name,
+        "body":  {
+          "policy": _policy
+        }
+    }
+}
+
 # Make a copy of the input, omitting the bindings
-remediate[key] = value {
+_policy[key] = value {
  key != "bindings"
- input[key]=value
+ iam[key]=value
 }
 
 # Now rebuild the bindings
-remediate[key] = value {
+_policy[key] = value {
   key := "bindings"
   value := [binding | binding := _bindings[_]
     # Remove any binding that no longer have any members
@@ -61,7 +84,7 @@ remediate[key] = value {
 }
 
 # Pass all binding through the fix_binding function
-_bindings = [_fix_binding(binding) | binding := input.bindings[_]]
+_bindings = [_fix_binding(binding) | binding := iam.bindings[_]]
 
 # The fixed bindings are just the expected fields with members filtered
 _fix_binding(b) = {"members": _remove_bad_members(b.members), "role": b.role}
@@ -69,6 +92,6 @@ _fix_binding(b) = {"members": _remove_bad_members(b.members), "role": b.role}
 # Given a list of members, remove the bad one(s)
 _remove_bad_members(members) = m {
   m = [member | member := members[_]
-    member != "allAuthenticatedUsers"
+    member != "allUsers"
   ]
 }

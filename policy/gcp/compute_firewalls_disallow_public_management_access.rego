@@ -13,13 +13,25 @@
 # limitations under the License.
 
 
-package gcp.compute.firewalls.policy.disable_public_access
+package rpe.policy.compute_firewalls_disallow_public_management_access
+
+import data.rpe.gcp.util as gcputil
+
+#####
+# Policy metadata
+#####
+
+description = "Disallow public management access in firewall rules"
+applies_to = [
+  "compute.googleapis.com/Firewall"
+]
 
 #####
 # Resource metadata
 #####
 
-labels = input.labels
+resource = input.resource
+labels = resource.labels
 
 # A list of TCP ports we don't want to allow public access to
 bad_tcp_ports = [22, 3389]
@@ -29,21 +41,22 @@ bad_tcp_ports = [22, 3389]
 #####
 
 default valid = true
+default excluded = false
 
 # Check if public access is enabled for everything
 valid = false {
-  input.direction == "INGRESS"
-  input.sourceRanges[_] == "0.0.0.0/0"
-  input.allowed[rule_id].IPProtocol == "all"
-  not input.disabled
+  resource.direction == "INGRESS"
+  resource.sourceRanges[_] == "0.0.0.0/0"
+  resource.allowed[rule_id].IPProtocol == "all"
+  not resource.disabled
 }
 
 # Check if public access is enabled for a bad TCP port
 valid = false {
-  input.direction == "INGRESS"
-  input.sourceRanges[_] == "0.0.0.0/0"
+  resource.direction == "INGRESS"
+  resource.sourceRanges[_] == "0.0.0.0/0"
   has_bad_tcp_port
-  not input.disabled
+  not resource.disabled
 }
 
 # Check for bad TCP ports in rules
@@ -51,21 +64,21 @@ default has_bad_tcp_port = false
 
 ## Explicitly lists bad port
 has_bad_tcp_port = true {
-  input.allowed[rule_id].IPProtocol == "tcp"
-  input.allowed[rule_id].ports[_] == sprintf("%d", [ bad_tcp_ports[_] ])
+  resource.allowed[rule_id].IPProtocol == "tcp"
+  resource.allowed[rule_id].ports[_] == sprintf("%d", [ bad_tcp_ports[_] ])
 }
 
 ## Allows all ports
 has_bad_tcp_port = true {
-  input.allowed[rule_id].IPProtocol == "tcp"
-  not input.allowed[rule_id].ports
+  resource.allowed[rule_id].IPProtocol == "tcp"
+  not resource.allowed[rule_id].ports
 }
 
 ## Has a port range that contains a bad port
 has_bad_tcp_port = true {
-  input.allowed[rule_id].IPProtocol == "tcp"
-  contains(input.allowed[rule_id].ports[port], "-")
-  port_range := split(input.allowed[rule_id].ports[port], "-")
+  resource.allowed[rule_id].IPProtocol == "tcp"
+  contains(resource.allowed[rule_id].ports[port], "-")
+  port_range := split(resource.allowed[rule_id].ports[port], "-")
   to_number(port_range[0]) <= bad_tcp_ports[port_id]
   to_number(port_range[1]) >= bad_tcp_ports[port_id]
 }
@@ -74,14 +87,20 @@ has_bad_tcp_port = true {
 # Remediation
 #####
 
-# Make a copy of the input, omitting the versioning field
-remediate[key] = value {
-  key != "disabled"
-  input[key]=value
+remediate = {
+  "_remediation_spec": "v2beta1",
+  "steps": [
+    disable_firewall
+  ]
 }
 
-# Set the versioning field such that the bucket adheres to the policy
-remediate[key] = value {
-  key:="disabled"
-  value:="true"
+disable_firewall = {
+    "method": "patch",
+    "params": {
+        "project": gcputil.resource_from_collection_path(resource.selfLink, "projects"),
+        "firewall": resource.name,
+        "body":  {
+            "disabled": true
+        }
+    }
 }

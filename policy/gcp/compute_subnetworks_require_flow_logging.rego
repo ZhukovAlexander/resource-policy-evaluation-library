@@ -13,27 +13,39 @@
 # limitations under the License.
 
 
-package gcp.container.projects.locations.clusters.policy.abac_disabled
+package rpe.policy.compute_subnetworks_require_flow_logging
+import data.rpe.gcp.util as gcputil
+
+#####
+# Policy metadata
+#####
+
+description = "Require flow logging for subnetworks"
+applies_to = [
+  "compute.googleapis.com/Subnetwork"
+]
 
 #####
 # Resource metadata
 #####
 
-labels = input.labels
+resource = input.resource
+labels = resource.labels
 
 #####
 # Policy evaluation
 #####
 
 default valid = false
+default excluded = false
 
-# Check if legacy ABAC is enabled
+# Check if flow logs are enabled
 valid = true {
-  not input.legacyAbac.enabled
+  resource.enableFlowLogs == true
 }
 
 # Check for a global exclusion based on resource labels
-valid = true {
+excluded = true {
   data.exclusions.label_exclude(labels)
 }
 
@@ -44,23 +56,19 @@ valid = true {
 remediate = {
   "_remediation_spec": "v2beta1",
   "steps": [
-    disable_legacy_abac
+    enable_flow_logging
   ]
 }
 
-disable_legacy_abac = {
-    "method": "setLegacyAbac",
+enable_flow_logging = {
+    "method": "patch",
     "params": {
-        "name": combinedName,
+        "project": gcputil.resource_from_collection_path(resource.selfLink, "projects"),
+        "region": gcputil.resource_from_collection_path(resource.selfLink, "regions"),
+        "subnetwork": resource.name,
         "body":  {
-            "name": combinedName,
-            "enabled": false
+            "enableFlowLogs": true,
+            "fingerprint": resource.fingerprint
         }
     }
 }
-
-# break out the selfLink so we can extract the project, region and name
-selfLinkParts = split(input.selfLink, "/")
-
-# create combined resource name
-combinedName = sprintf("projects/%s/locations/%s/clusters/%s", [selfLinkParts[5], selfLinkParts[7], selfLinkParts[9]])

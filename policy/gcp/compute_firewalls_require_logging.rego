@@ -13,28 +13,40 @@
 # limitations under the License.
 
 
-package gcp.compute.subnetworks.policy.private_google_access
+package rpe.policy.compute_firewalls_require_logging
+import data.rpe.gcp.util as gcputil
+
+#####
+# Policy metadata
+#####
+
+description = "Require logging for firewall rules"
+applies_to = [
+  "compute.googleapis.com/Firewall"
+]
 
 #####
 # Resource metadata
 #####
 
-labels = input.labels
+resource = input.resource
+labels = resource.labels
 
 #####
 # Policy evaluation
 #####
 
 default valid = false
+default excluded = false
 
-# Check if accessing Google services without external IP is enabled
+# Check if Logging is enabled
 valid = true {
-  input.privateIpGoogleAccess == true
+  resource.logConfig.enable = true
 }
 
-# Check for a global exclusion based on resource labels
+# Check if firewall is disabled
 valid = true {
-  data.exclusions.label_exclude(labels)
+  resource.disabled
 }
 
 #####
@@ -44,21 +56,19 @@ valid = true {
 remediate = {
   "_remediation_spec": "v2beta1",
   "steps": [
-    enable_private_google_access
+    enable_logging
   ]
 }
 
-enable_private_google_access = {
-    "method": "setPrivateIpGoogleAccess",
+enable_logging = {
+    "method": "patch",
     "params": {
-        "subnetwork": input.name,
-        "region": selfLinkParts[8],
-        "project": selfLinkParts[6],
+        "project": gcputil.resource_from_collection_path(resource.selfLink, "projects"),
+        "firewall": resource.name,
         "body":  {
-            "privateIpGoogleAccess": true
+            "logConfig": {
+              "enable": true
+            }
         }
     }
 }
-
-# break out the selfLink so we can extract the project and region
-selfLinkParts = split(input.selfLink, "/")

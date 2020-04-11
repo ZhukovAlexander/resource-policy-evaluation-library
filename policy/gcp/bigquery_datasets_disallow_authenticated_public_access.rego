@@ -13,32 +13,38 @@
 # limitations under the License.
 
 
-package gcp.bigquery.datasets.policy.no_public_authenticated_access
+package rpe.policy.bigquery_datasets_disallow_authenticated_public_access
+
+#####
+# Policy metadata
+#####
+
+description = "Disallow authenticated public access to bigquery datasets"
+applies_to = [
+    "bigquery.googleapis.com/Dataset"
+]
 
 #####
 # Resource metadata
 #####
 
-labels = input.labels
+resource = input.resource
+labels = resource.labels
 
 #####
 # Policy evaluation
 #####
 
 default valid = true
+default excluded = false
 
 valid = false {
   # Check for bad acl
   input.access[_].specialGroup == "allAuthenticatedUsers"
+}
 
-  # Just in case labels are not in the input
-  not labels
-} else = false {
-  # Check for bad acl
-  input.access[_].specialGroup == "allAuthenticatedUsers"
-
-  # Also, this must be false
-  not data.exclusions.label_exclude(labels)
+excluded = true {
+  data.exclusions.label_exclude(labels)
 }
 
 #####

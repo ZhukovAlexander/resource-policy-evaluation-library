@@ -13,27 +13,36 @@
 # limitations under the License.
 
 
-package gcp.storage.buckets.policy.versioning
+package rpe.policy.storage_buckets_require_object_versioning
+
+#####
+# Policy metadata
+#####
+
+description = "Require object versioning for storage buckets"
+applies_to = [
+  "storage.googleapis.com/Bucket"
+]
 
 #####
 # Resource metadata
 #####
 
-labels = input.labels
+resource = input.resource
+labels = resource.labels
 
 #####
 # Policy evaluation
 #####
 
 default valid = false
+default excluded = false
 
-# Check if versioning is enabled
 valid = true {
-  input.versioning.enabled = true
+  resource.versioning.enabled = true
 }
 
-# Check for a global exclusion based on resource labels
-valid = true {
+excluded = true {
   data.exclusions.label_exclude(labels)
 }
 
@@ -41,17 +50,21 @@ valid = true {
 # Remediation
 #####
 
-# Make a copy of the input, omitting the versioning field
-remediate[key] = value {
-  # If there is a retentionPolicy, we cant enable versioning, theres no remediation steps
-  not input.retentionPolicy
-  key != "versioning"
-  input[key]=value
+remediate = {
+  "_remediation_spec": "v2beta1",
+  "steps": [
+    enable_versioning
+  ]
 }
 
-# Set the versioning field such that the bucket adheres to the policy
-remediate[key] = value {
-  not input.retentionPolicy
-  key:="versioning"
-  value:={"enabled":true}
+enable_versioning = {
+    "method": "patch",
+    "params": {
+        "bucket": resource.name,
+        "body":  {
+          "versioning": {
+            "enabled": true
+          }
+        }
+    }
 }

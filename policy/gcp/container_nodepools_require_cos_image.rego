@@ -13,28 +13,38 @@
 # limitations under the License.
 
 
-package gcp.container.projects.locations.clusters.policy.cos_image_used
+package rpe.policy.container_nodepools_require_cos_image
+
+#####
+# Policy metadata
+#####
+
+description = "Require nodepools to use the Container-Optimized OS images"
+applies_to = [
+  "container.googleapis.com/Cluster"
+]
 
 #####
 # Resource metadata
 #####
 
-labels = input.labels
+resource = input.resource
+labels = resource.labels
 
 #####
 # Policy evaluation
 #####
 
 default valid = false
+default excluded = false
 
 # Check if COS image is being used
 valid = true {
-  invalid_nodepools := [name | input.nodePools[p].config.imageType != "COS"; name := input.nodePools[p].name]
-  count(invalid_nodepools) == 0
+  count(_invalid_nodepools) == 0
 }
 
 # Check for a global exclusion based on resource labels
-valid = true {
+excluded = true {
   data.exclusions.label_exclude(labels)
 }
 
@@ -64,11 +74,21 @@ use_cos_image = result {
   }
 }
 
-# define list of nodePools using wrong image types
-_invalid_nodepools = invalid_nodepools { invalid_nodepools := [name | input.nodePools[p].config.imageType != "COS"; name := input.nodePools[p].name] }
+_allowed_image_types = {"COS", "COS_CONTAINERD"}
+
+_all_nodepools = { name |
+  name := resource.nodePools[_].name
+}
+
+_valid_nodepools = { name |
+  resource.nodePools[p].config.imageType = _allowed_image_types[_];
+  name := resource.nodePools[p].name
+}
+
+_invalid_nodepools = _all_nodepools - _valid_nodepools
 
 # break out the selfLink so we can extract the project, region, cluster and name
-selfLinkParts = split(input.selfLink, "/")
+selfLinkParts = split(resource.selfLink, "/")
 
 # create combined resource name
 combinedName = sprintf("projects/%s/locations/%s/clusters/%s", [selfLinkParts[5], selfLinkParts[7], selfLinkParts[9]])
